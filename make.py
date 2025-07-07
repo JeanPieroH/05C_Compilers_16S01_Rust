@@ -43,7 +43,7 @@ if not input_files:
 
 # Opcional: Limpiar directorio de salidas antiguas
 print(f"Limpiando directorio de salidas antiguas: {output_dir}")
-for old_output_file in glob.glob(os.path.join(output_dir, "*.rs.out")):
+for old_output_file in glob.glob(os.path.join(output_dir, "*.rs")):
     try:
         os.remove(old_output_file)
     except OSError as e:
