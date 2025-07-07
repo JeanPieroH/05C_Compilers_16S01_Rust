@@ -1,0 +1,28 @@
+# Ignorar el ejecutable compilado (Windows y Unix)
+compiler_rust.exe
+compiler_rust.out
+
+# Ignorar carpetas de salida y logs
+outputs/
+logs/
+
+# Archivos temporales de compilación
+*.o
+*.obj
+*.exe
+*.out
+*.log
+*.txt
+*.pdf
+
+# Archivos de respaldo
+*~
+*.bak
+
+# Archivos de sistema
+.DS_Store
+Thumbs.db
+
+# Archivos de entorno (si usas VSCode o CLion, por ejemplo)
+.vscode/
+.idea/
