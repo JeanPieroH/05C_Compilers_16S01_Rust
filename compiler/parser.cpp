@@ -53,12 +53,36 @@ Parser::Parser(Scanner* sc, std::ostream& out):scanner(sc),out(out) {
 
 
 Program* Parser::parseProgram() {
-                out<<"ento";
+    // Intentar imprimir a std::cerr para diagnóstico inmediato
+    std::cerr << "DEBUG: Parser::parseProgram() BEGIN" << std::endl;
+    out << "Parser::parseProgram() BEGIN" << std::endl; // Mensaje de depuración inicial a out
 
     Program* prog = new Program();
+    if (!prog) {
+        std::cerr << "FATAL_ERR: new Program() devolvió nullptr." << std::endl;
+        out << "FATAL_OUT: new Program() devolvió nullptr." << std::endl;
+        exit(1);
+    }
+    if (!prog->fundecs) {
+        std::cerr << "FATAL_ERR: prog->fundecs es nullptr después de new Program()." << std::endl;
+        out << "FATAL_OUT: prog->fundecs es nullptr después de new Program()." << std::endl;
+        delete prog; // Evitar fuga si fundecs es el problema pero prog no.
+        exit(1);
+    }
+
+    // out << "Parser::parseProgram(): new Program() y prog->fundecs parecen OK. Llamando a parseFunDec..." << std::endl;
 
 //    while (check(Token::FUN)) { // <DeclaracionGlobal> ::= <DeclaracionFuncion>
-        prog->fundecs->add(parseFunDec());
+        FunDec* fun = parseFunDec(); // parseFunDec también usa 'out' para errores y hace exit(1)
+        if (!fun) {
+             // Este caso no debería ocurrir si parseFunDec hace exit(1) en error.
+             // Pero si parseFunDec pudiera retornar nullptr sin hacer exit:
+             std::cerr << "FATAL_ERR: parseFunDec() devolvió nullptr." << std::endl;
+             out << "FATAL_OUT: parseFunDec() devolvió nullptr." << std::endl;
+             delete prog;
+             exit(1);
+        }
+        prog->fundecs->add(fun);
 //   }
     return prog;
 }
@@ -80,10 +104,19 @@ FunDec* Parser::parseFunDec() {
     }
 
     if (!check(Token::PD)) { // Puede haber parámetros
-        list<pair<string, bool>> params = parseParameterList();
-        for (auto const& [id, is_mut] : params) {
-            fundec->parametros.push_back(id);
-            fundec->ref_mut.push_back(is_mut); // Usamos ref_mut para el 'mut' de los parámetros
+        list<pair<string, bool>> params_from_parser = parseParameterList(); // Elementos son pair<"id:type", bool>
+        for (auto const& [id_colon_type, is_mut] : params_from_parser) {
+            size_t colon_pos = id_colon_type.find(':');
+            if (colon_pos == std::string::npos) {
+                out << "Error interno: formato de parámetro incorrecto desde parseParameterList: " << id_colon_type << endl;
+                exit(1);
+            }
+            string p_id = id_colon_type.substr(0, colon_pos);
+            string p_type = id_colon_type.substr(colon_pos + 1);
+
+            fundec->parametros.push_back(p_id); // Almacena solo el nombre del parámetro
+            fundec->tipos.push_back(p_type);    // Almacena solo el tipo del parámetro
+            fundec->ref_mut.push_back(is_mut);  // Almacena si es &mut
         }
     }
     if (!match(Token::PD)) { // )
@@ -106,44 +139,55 @@ FunDec* Parser::parseFunDec() {
 // <ListaParametros> ::= <Identificador> : [ &mut ] <Tipo> (, <Identificador> : [ &mut ] <Tipo>)*
 list<pair<string, bool>> Parser::parseParameterList() {
     list<pair<string, bool>> params;
-    bool is_mut = false;
+    string id;
+    string type;
+    bool is_mut;
 
     // Primer parámetro
-    if (match(Token::REF)) { // '&' opcional
-        is_mut = true;
-    }
-    if (match(Token::MUT)) { // 'mut' opcional después de '&'
-        is_mut = true;
-    }
+    is_mut = false;
     if (!match(Token::ID)) {
         out << "Error: se esperaba un identificador de parámetro." << endl;
         exit(1);
     }
-    string id = previous->text;
+    id = previous->text;
+
     if (!match(Token::COLON)) {
-        out << "Error: se esperaba ':' después del identificador del parámetro." << endl;
+        out << "Error: se esperaba ':' después del identificador del parámetro '" << id << "'." << endl;
         exit(1);
     }
-    string type = parseType();
-    params.push_back({id + ":" + type, is_mut}); // Concatenamos para almacenar id:tipo
+
+    if (match(Token::REF)) {
+        if (!match(Token::MUT)) {
+            out << "Error: se esperaba 'mut' después de '&' para el parámetro '" << id << "'." << endl;
+            // Considerar si '&' solo es permitido para referencias inmutables (no en gramática actual)
+            // Por ahora, se asume que si hay '&', debe ser '&mut'.
+            exit(1);
+        }
+        is_mut = true;
+    }
+    type = parseType();
+    params.push_back({id + ":" + type, is_mut});
 
     // Parámetros adicionales
     while (match(Token::COMA)) {
         is_mut = false; // Reset para el siguiente parámetro
-        if (match(Token::REF)) {
-            is_mut = true;
-        }
-        if (match(Token::MUT)) {
-            is_mut = true;
-        }
         if (!match(Token::ID)) {
             out << "Error: se esperaba un identificador de parámetro después de ','." << endl;
             exit(1);
         }
         id = previous->text;
+
         if (!match(Token::COLON)) {
-            out << "Error: se esperaba ':' después del identificador del parámetro." << endl;
+            out << "Error: se esperaba ':' después del identificador del parámetro '" << id << "'." << endl;
             exit(1);
+        }
+
+        if (match(Token::REF)) {
+            if (!match(Token::MUT)) {
+                out << "Error: se esperaba 'mut' después de '&' para el parámetro '" << id << "'." << endl;
+                exit(1);
+            }
+            is_mut = true;
         }
         type = parseType();
         params.push_back({id + ":" + type, is_mut});
@@ -173,22 +217,19 @@ Body* Parser::parseBody() {
 // <Sentencia>
 Stm* Parser::parseStatement() {
     Stm* s = nullptr;
-    string id_name;
-    Exp* cond_exp;
-    Body* then_body;
-    Body* else_body = nullptr; // Opcional
 
-    // <DeclaracionVariable>
-    if (match(Token::LET)) {
-        out<<"entra";
+    // <DeclaracionVariable> ::= let [mut] <Identificador> [: <Tipo> | [: [<Tipo>; <LiteralEntero>]]] [= <CExp>];
+    if (check(Token::LET)) { // Usar check primero para no consumir si no es LET
+        advance(); // Consumir LET
+        // out<<"entra"; // Debug
         bool is_mut = match(Token::MUT);
         if (!match(Token::ID)) {
-            out << "Error: se esperaba un identificador después de 'let'." << endl;
+            out << "Error: se esperaba un identificador después de 'let" << (is_mut ? " mut" : "") << "'." << endl;
             exit(1);
         }
-        id_name = previous->text;
-        string type_name = "";
-        Exp* array_size = nullptr;
+        string id_name = previous->text;
+        string type_name = ""; // Puede ser string vacía si no se especifica tipo
+        Exp* array_size_exp = nullptr;
         Exp* initial_value = nullptr;
 
         if (match(Token::COLON)) { // Opcional : <Tipo> | [ <Tipo> ; <LiteralEntero> ]
@@ -196,16 +237,16 @@ Stm* Parser::parseStatement() {
                 advance(); // Consumir '['
                 type_name = parseType(); // Tipo del array
                 if (!match(Token::PC)) { // ;
-                    out << "Error: se esperaba ';' en la declaración de array." << endl;
+                    out << "Error: se esperaba ';' en la declaración de array ([Type; Size])." << endl;
                     exit(1);
                 }
-                if (!match(Token::INT)) { // LiteralEntero
-                    out << "Error: se esperaba un tamaño entero para el array." << endl;
+                if (!match(Token::LITERAL_INT)) { // LiteralEntero para el tamaño
+                    out << "Error: se esperaba un tamaño entero literal para el array." << endl;
                     exit(1);
                 }
-                array_size = new IntExp(stoi(previous->text));
+                array_size_exp = new IntExp(stoi(previous->text));
                 if (!match(Token::CD)) { // ]
-                    out << "Error: se esperaba ']' en la declaración de array." << endl;
+                    out << "Error: se esperaba ']' al final de la declaración de tamaño de array." << endl;
                     exit(1);
                 }
             } else { // Es un tipo simple: <Tipo>
@@ -221,171 +262,63 @@ Stm* Parser::parseStatement() {
             out << "Error: se esperaba ';' al final de la declaración de variable." << endl;
             exit(1);
         }
-        s = new DecStament(is_mut, type_name, id_name);
-        // Aquí necesitarías un constructor de DecStatement que reciba el valor inicial y el tamaño del array
-        // Por simplicidad, se asignará después si initial_value no es null.
-        if (initial_value) {
-            // Esto es un placeholder, deberías manejar la asignación inicial en DecStament o un nodo separado.
-            // Para arrays, la lógica es más compleja y se necesitaría un nodo DecArrayStatement
-        }
-    }
-    // <Asignacion> ;
-    else if (check(Token::ID)) {
-        id_name = current->text; // Peek para ver si es ID o AccesoArray
-        advance(); // Consumir el ID
 
-        if (match(Token::CI)) { // AccesoArray
-            Exp* index = parseCExp();
-            if (!match(Token::CD)) {
-                out << "Error: se esperaba ']' después del índice del array." << endl;
-                exit(1);
-            }
-            if (!match(Token::ASSIGN)) {
-                out << "Error: se esperaba '=' para la asignación de array." << endl;
-                exit(1);
-            }
-            Exp* rhs_exp = parseCExp();
-            s = new AssignArrayStatement(id_name, index, rhs_exp);
-        } else if (match(Token::ASSIGN)) { // Asignacion simple
-            Exp* rhs_exp = parseCExp();
-            s = new AssignStatement(id_name, rhs_exp);
-        } else {
-            out << "Error: Asignación o acceso a array mal formado." << endl;
-            exit(1);
+        DecStament* dec_stm = new DecStament(is_mut, type_name, id_name);
+        if (initial_value) {
+            dec_stm->value = initial_value;
         }
-        if (!match(Token::PC)) {
-            out << "Error: se esperaba ';' al final de la asignación." << endl;
-            exit(1);
-        }
+        // TODO: El AST de DecStament y su manejo en el visitor necesitarán considerar array_size_exp
+        // y si la declaración es de un array o un tipo simple.
+        // Por ejemplo, se podría añadir: dec_stm->array_size = array_size_exp;
+        s = dec_stm;
     }
-    // println! ( <PrintExp> ) ;
+    // println!(<PrintExp>);
     else if (match(Token::PRINT)) {
         if (!match(Token::PI)) {
             out << "Error: se esperaba '(' después de 'println!'." << endl;
             exit(1);
         }
-
         string format_string = "";
-        vector<Exp*> arg_exps; // Argumentos que van después de la cadena de formato
-
+        vector<Exp*> arg_exps;
         if (!match(Token::STRING)) {
             out << "Error: se esperaba una cadena literal como primer argumento de println!." << endl;
             exit(1);
         }
-        format_string = previous->text; // Captura la cadena de formato
-
-        // Ahora, si hay más argumentos después de la cadena, los parseamos como CExp
+        format_string = previous->text;
         while (match(Token::COMA)) {
             arg_exps.push_back(parseCExp());
         }
-
         if (!match(Token::PD)) {
-            out << "Error: se esperaba ')' después de la expresión(es) en println!." << endl;
+            out << "Error: se esperaba ')' después de los argumentos en println!." << endl;
             exit(1);
         }
         if (!match(Token::PC)) {
-            out << "Error: se esperaba ';' al final de println!." << endl;
+            out << "Error: se esperaba ';' al final de la sentencia println!." << endl;
             exit(1);
         }
-        // Creamos el PrintStatement con la cadena de formato y el vector de expresiones
         s = new PrintStatement(format_string, arg_exps);
     }
-    // <SentenciaControl>
+    // <SentenciaControl> ::= <IfElseSentencia> | <WhileSentencia> | <ForSentencia>
     else if (check(Token::IF) || check(Token::WHILE) || check(Token::FOR)) {
         s = parseControlStatement();
     }
-    // return [<CExp>] ;
+    // return [<CExp>];
     else if (match(Token::RETURN)) {
         Exp* ret_exp = nullptr;
-        if (!check(Token::PC)) { // Hay una expresión de retorno
+        if (!check(Token::PC)) { // Si no es directamente un ';', entonces hay una expresión
             ret_exp = parseCExp();
         }
         if (!match(Token::PC)) {
             out << "Error: se esperaba ';' al final de la sentencia 'return'." << endl;
             exit(1);
         }
-        s = new ReturnStatement();
-        // Si tu ReturnStatement necesita la expresión, adapta el constructor
-        if (ret_exp) {
-            static_cast<ReturnStatement*>(s)->e = ret_exp;
+        ReturnStatement* ret_stm = new ReturnStatement();
+        if (ret_exp) { // Asignar la expresión si existe
+            ret_stm->e = ret_exp;
         }
+        s = ret_stm;
     }
-    // <LlamadaFuncion> ;
-    if (check(Token::ID)) { // Solo verificamos, NO consumimos todavía
-        string id_name = current->text; // Obtenemos el nombre del ID
-        advance(); // Ahora sí, consumimos el Token::ID
-
-        // Después de un ID, podemos tener:
-        // 1. (  -> Llamada a función (FCallExp)
-        // 2. [  -> Acceso a array (AccesoArrayExp) seguido de una asignación
-        // 3. =  -> Asignación simple (AssignStatement)
-
-        if (match(Token::PI)) { // Es una LlamadaFuncion
-            // Ya consumimos ID, ahora consumimos PI
-            FCallExp* fcall_exp = new FCallExp();
-            fcall_exp->nombre = id_name;
-            
-            if (!check(Token::PD)) { // Puede haber argumentos
-                list<pair<bool, Exp*>> args = parseArgumentList();
-                for (auto const& [is_mut_ref, arg_exp] : args) {
-                    fcall_exp->argumentos.push_back(arg_exp);
-                    fcall_exp->ref_mut.push_back(is_mut_ref);
-                }
-            }
-            if (!match(Token::PD)) { // )
-                out << "Error: se esperaba ')' después de los argumentos de la función '" << id_name << "'." << endl;
-                exit(1);
-            }
-            if (!match(Token::PC)) { // ;
-                out << "Error: se esperaba ';' al final de la llamada a función." << endl;
-                exit(1);
-            }
-            s = new FCallStm();
-            static_cast<FCallStm*>(s)->nombre = fcall_exp->nombre;
-            static_cast<FCallStm*>(s)->argumentos = fcall_exp->argumentos;
-            static_cast<FCallStm*>(s)->ref_mut = fcall_exp->ref_mut;
-            delete fcall_exp; // Liberar el FCallExp temporal
-        }
-        else if (match(Token::CI)) { // Es un AccesoArray que DEBE ser seguido por una asignación
-            // Ya consumimos ID, ahora consumimos CI
-            Exp* index = parseCExp();
-            if (!match(Token::CD)) { // ]
-                out << "Error: se esperaba ']' después del índice del array para '" << id_name << "'." << endl;
-                exit(1);
-            }
-            
-            // Después del AccesoArray, *debe* venir un '=' para que sea una <Asignacion> válida
-            if (match(Token::ASSIGN)) { // AccesoArray = CExp ;
-                Exp* rhs_exp = parseCExp();
-                s = new AssignArrayStatement(id_name, index, rhs_exp);
-            } else {
-                // Si llegamos aquí, significa que encontramos AccesoArray pero no un '=',
-                // lo cual no es una <Asignacion> válida según la gramática para ser una sentencia.
-                out << "Error: se esperaba '=' después del acceso al array '" << id_name << "' para una asignación válida." << endl;
-                exit(1);
-            }
-
-            if (!match(Token::PC)) { // ;
-                out << "Error: se esperaba ';' al final de la asignación de array." << endl;
-                exit(1);
-            }
-        }
-        else if (match(Token::ASSIGN)) { // Es una Asignacion (simple)
-            // Ya consumimos ID, ahora consumimos ASSIGN
-            Exp* rhs_exp = parseCExp();
-            if (!match(Token::PC)) { // ;
-                out << "Error: se esperaba ';' al final de la asignación." << endl;
-                exit(1);
-            }
-            s = new AssignStatement(id_name, rhs_exp);
-        }
-        else {
-            // Si el ID no fue seguido por '(', '[', o '=', es un error.
-            out << "Error: Sentencia que comienza con '" << id_name << "' no reconocida o mal formada. Se esperaba '(', '[', o '='." << endl;
-            exit(1);
-        }
-    }
-    // break ;
+    // break;
     else if (match(Token::BREAK)) {
         if (!match(Token::PC)) {
             out << "Error: se esperaba ';' al final de 'break'." << endl;
@@ -393,8 +326,76 @@ Stm* Parser::parseStatement() {
         }
         s = new BreakStm();
     }
+    // Sentencias que comienzan con ID:
+    // <Asignacion>; -> <Identificador> = <CExp>;  O  <AccesoArray> = <CExp>;
+    // <LlamadaFuncion>; -> <Identificador>(<ListaArgumentos>);
+    else if (check(Token::ID)) {
+        string id_name_val = current->text; // Guardar el texto del ID ANTES de consumirlo
+        advance(); // Consumir el ID. 'previous' es ahora el token ID.
+
+        // Caso 1: <LlamadaFuncion> ;  -> ID ( [<ListaArgumentos>] ) ;
+        if (match(Token::PI)) { // Consumir PI si es una llamada a función
+            FCallStm* fcall_stm = new FCallStm();
+            fcall_stm->nombre = id_name_val;
+            if (!check(Token::PD)) { // Si no es ')', parsear argumentos
+                list<pair<bool, Exp*>> args_list = parseArgumentList();
+                for (auto const& [is_mut, arg_exp_item] : args_list) {
+                    fcall_stm->argumentos.push_back(arg_exp_item);
+                    fcall_stm->ref_mut.push_back(is_mut);
+                }
+            }
+            if (!match(Token::PD)) { // Consumir PD
+                out << "Error: se esperaba ')' después de los argumentos de la función '" << id_name_val << "'." << endl;
+                delete fcall_stm; exit(1);
+            }
+            if (!match(Token::PC)) { // Consumir PC
+                out << "Error: se esperaba ';' al final de la llamada a función '" << id_name_val << "'." << endl;
+                delete fcall_stm; exit(1);
+            }
+            s = fcall_stm;
+        }
+        // Caso 2: <Asignacion> ; -> <AccesoArray> = <CExp> ;  -> ID [ <CExp> ] = <CExp> ;
+        else if (match(Token::CI)) { // Consumir CI si es acceso a array
+            Exp* index_exp = parseCExp();
+            if (!match(Token::CD)) { // Consumir CD
+                out << "Error: se esperaba ']' después del índice del array para '" << id_name_val << "'." << endl;
+                exit(1);
+            }
+            if (!match(Token::ASSIGN)) { // Consumir ASSIGN
+                out << "Error: se esperaba '=' para la asignación al elemento del array '" << id_name_val << "'." << endl;
+                exit(1);
+            }
+            Exp* rhs_exp = parseCExp();
+            if (!match(Token::PC)) { // Consumir PC
+                out << "Error: se esperaba ';' al final de la asignación de array '" << id_name_val << "'." << endl;
+                exit(1);
+            }
+            s = new AssignArrayStatement(id_name_val, index_exp, rhs_exp);
+        }
+        // Caso 3: <Asignacion> ; -> <Identificador> = <CExp> ; -> ID = <CExp> ;
+        else if (match(Token::ASSIGN)) { // Consumir ASSIGN si es asignación simple
+            Exp* rhs_exp = parseCExp();
+            if (!match(Token::PC)) { // Consumir PC
+                out << "Error: se esperaba ';' al final de la asignación para '" << id_name_val << "'." << endl;
+                exit(1);
+            }
+            s = new AssignStatement(id_name_val, rhs_exp);
+        }
+        // Error: ID no seguido de (, [, o =
+        else {
+            out << "Error: Sentencia que comienza con identificador '" << id_name_val
+                << "' mal formada. Se esperaba '(', '[', o '=' después del ID. Se encontró: " << *current << endl;
+            // 'previous' es el ID, 'current' es lo que le sigue.
+            exit(1);
+        }
+    }
+    // Si no es ninguna de las anteriores, es un error.
     else {
-        out << "Error: Sentencia no reconocida o mal formada: " << *current << endl;
+        if (isAtEnd()) {
+            out << "Error: Se esperaba una sentencia, pero se encontró el final del archivo." << endl;
+        } else {
+            out << "Error: Sentencia no reconocida o mal formada. Token actual: " << *current << endl;
+        }
         exit(1);
     }
     return s;
@@ -526,9 +527,9 @@ Exp* Parser::parseFactor() {
     Exp* e;
     string id_name;
 
-    if (match(Token::INT)) {
+    if (match(Token::LITERAL_INT)) {
         return new IntExp(stoi(previous->text));
-    } else if (match(Token::FLOAT)) {
+    } else if (match(Token::LITERAL_FLOAT)) {
         return new FloatExp(stod(previous->text));
     } else if (match(Token::TRUE)) {
         return new BoolExp(true);
@@ -586,11 +587,11 @@ Exp* Parser::parseFactor() {
 
 // <Tipo> ::= i64 | f64 | bool
 string Parser::parseType() {
-    if (match(Token::INT)) { // Asumiendo Token::I64_KEYWORD
+    if (match(Token::TYPE_I64)) {
         return "i64";
-    } else if (match(Token::FLOAT)) { // Asumiendo Token::F64_KEYWORD
+    } else if (match(Token::TYPE_F64)) {
         return "f64";
-    } else if (match(Token::BOOL)) { // Asumiendo Token::BOOL_KEYWORD
+    } else if (match(Token::TYPE_BOOL)) {
         return "bool";
     }
     out << "Error: se esperaba un tipo (i64, f64, bool)." << endl;
@@ -599,9 +600,9 @@ string Parser::parseType() {
 
 // <Literal> ::= <LiteralEntero> | <LiteralFlotante>
 Exp* Parser::parseLiteral() {
-    if (match(Token::INT)) {
+    if (match(Token::LITERAL_INT)) {
         return new IntExp(stoi(previous->text));
-    } else if (match(Token::FLOAT)) {
+    } else if (match(Token::LITERAL_FLOAT)) {
         return new FloatExp(stod(previous->text));
     }
     out << "Error: se esperaba un literal (entero o flotante)." << endl;
@@ -630,26 +631,40 @@ Exp* Parser::parseLiteralArray() {
 // <ListaArgumentos> ::= [ &mut ] <CExp> (, [ &mut ] <CExp>)*
 list<pair<bool, Exp*>> Parser::parseArgumentList() {
     list<pair<bool, Exp*>> args;
-    bool is_mut_ref = false;
+    bool is_mut_ref;
+    Exp* arg_exp;
 
     // Primer argumento
+    is_mut_ref = false;
     if (match(Token::REF)) {
+        if (!match(Token::MUT)) {
+            out << "Error: se esperaba 'mut' después de '&' en la lista de argumentos." << endl;
+            exit(1);
+        }
         is_mut_ref = true;
+    } else if (match(Token::MUT)) {
+        // Permitir 'mut' solo es un error si no va precedido por '&' según la gramática '[&mut]'
+        // Sin embargo, si la intención fuera permitir 'mut Identificador' (pasar por valor y permitir mutación local a la función llamada)
+        // la gramática y el manejo serían diferentes.
+        // Por ahora, un 'mut' suelto aquí sin '&' antes es un error contextual.
+        out << "Error: 'mut' inesperado sin '&' precedente en la lista de argumentos." << endl;
+        exit(1);
     }
-    if (match(Token::MUT)) {
-        is_mut_ref = true; // Si es '&mut', 'mut' también se marca como true
-    }
-    Exp* arg_exp = parseCExp();
+    arg_exp = parseCExp();
     args.push_back({is_mut_ref, arg_exp});
 
     // Argumentos adicionales
     while (match(Token::COMA)) {
         is_mut_ref = false; // Reset para el siguiente argumento
         if (match(Token::REF)) {
+            if (!match(Token::MUT)) {
+                out << "Error: se esperaba 'mut' después de '&' en la lista de argumentos (después de coma)." << endl;
+                exit(1);
+            }
             is_mut_ref = true;
-        }
-        if (match(Token::MUT)) {
-            is_mut_ref = true;
+        } else if (match(Token::MUT)) {
+            out << "Error: 'mut' inesperado sin '&' precedente en la lista de argumentos (después de coma)." << endl;
+            exit(1);
         }
         arg_exp = parseCExp();
         args.push_back({is_mut_ref, arg_exp});

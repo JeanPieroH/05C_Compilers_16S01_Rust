@@ -18,9 +18,14 @@ std::ostream& operator << ( std::ostream& outs, const Token & tok )
         case Token::MINUS: outs << "TOKEN(MINUS)"; break;
         case Token::MUL: outs << "TOKEN(MUL)"; break;
         case Token::DIV: outs << "TOKEN(DIV)"; break;
-        case Token::INT: outs << "TOKEN(INT)"; break;
-        case Token::FLOAT: outs << "TOKEN(FLOAT)"; break;
-        case Token::BOOL: outs << "TOKEN(BOOL)"; break;
+        // case Token::INT: outs << "TOKEN(INT)"; break; // Reemplazado por LITERAL_INT
+        // case Token::FLOAT: outs << "TOKEN(FLOAT)"; break; // Reemplazado por LITERAL_FLOAT
+        // case Token::BOOL: outs << "TOKEN(BOOL)"; break; // Reemplazado por TYPE_BOOL y literales TRUE/FALSE
+        case Token::LITERAL_INT: outs << "TOKEN(LITERAL_INT)"; break;
+        case Token::LITERAL_FLOAT: outs << "TOKEN(LITERAL_FLOAT)"; break;
+        case Token::TYPE_I64: outs << "TOKEN(TYPE_I64)"; break;
+        case Token::TYPE_F64: outs << "TOKEN(TYPE_F64)"; break;
+        case Token::TYPE_BOOL: outs << "TOKEN(TYPE_BOOL)"; break;
         case Token::ERR: outs << "TOKEN(ERR)"; break;
         case Token::PD: outs << "TOKEN(PD)"; break;
         case Token::PI: outs << "TOKEN(PI)"; break;
@@ -28,7 +33,7 @@ std::ostream& operator << ( std::ostream& outs, const Token & tok )
         case Token::LLI: outs << "TOKEN(LLI)"; break;
         case Token::CD: outs << "TOKEN(CD)"; break;
         case Token::CI: outs << "TOKEN(CI)"; break;
-        case Token::QUOTE: outs << "TOKEN(QUOTE)"; break;
+        // case Token::QUOTE: outs << "TOKEN(QUOTE)"; break; // Eliminado
         case Token::STRING: outs << "TOKEN(STRING)"; break;
         case Token::END: outs << "TOKEN(END)"; break;
         case Token::ID: outs << "TOKEN(ID)"; break;

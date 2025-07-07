@@ -51,35 +51,46 @@ Token* Scanner::nextToken() {
             while (current < input.length() && isdigit(input[current])) {
                 current++; 
             }
-            token = new Token(Token::FLOAT, input, first, current - first);
+            token = new Token(Token::LITERAL_FLOAT, input, first, current - first);
         } else {
             // Si no hay punto decimal, es un INT
-            token = new Token(Token::INT, input, first, current - first);
+            token = new Token(Token::LITERAL_INT, input, first, current - first);
         }
     }
 
     else if (isalpha(c) || c == '_') {
         current++;
-        while (current < input.length() && (isalnum(input[current]) || input[current] == '_' || input[current] == '!'))
-            current++;
-        string word = input.substr(first, current - first);
+        // Permitir '!' solo para el caso específico de 'println!'
+        // La regla general de identificador no debe incluir '!'
+        int id_end = current;
+        while (id_end < input.length() && (isalnum(input[id_end]) || input[id_end] == '_')) {
+            id_end++;
+        }
+        string word = input.substr(first, id_end - first);
 
-        if (word == "println!")     token = new Token(Token::PRINT, word, 0, word.length());
-        else if (word == "if")      token = new Token(Token::IF, word, 0, word.length());
-        else if (word == "else")    token = new Token(Token::ELSE, word, 0, word.length());
-        else if (word == "while")   token = new Token(Token::WHILE, word, 0, word.length());
-        else if (word == "for")     token = new Token(Token::FOR, word, 0, word.length());
-        else if (word == "true")    token = new Token(Token::TRUE, word, 0, word.length());
-        else if (word == "false")   token = new Token(Token::FALSE, word, 0, word.length());
-        else if (word == "return")  token = new Token(Token::RETURN, word, 0, word.length());
-        else if (word == "fn")      token = new Token(Token::FUN, word, 0, word.length());
-        else if (word == "let")     token = new Token(Token::LET, word, 0, word.length());
-        else if (word == "mut")     token = new Token(Token::MUT, word, 0, word.length());
-        else if (word == "i64")     token = new Token(Token::INT, word, 0, word.length());
-        else if (word == "f64")     token = new Token(Token::FLOAT, word, 0, word.length());
-        else if (word == "bool")     token = new Token(Token::BOOL, word, 0, word.length());
-        else if (word == "break")   token = new Token(Token::BREAK, word, 0, word.length());
-        else token = new Token(Token::ID, word, 0, word.length());
+        // Chequeo especial para println!
+        if (word == "println" && id_end < input.length() && input[id_end] == '!') {
+            current = id_end + 1; // Avanzar current más allá del '!'
+            token = new Token(Token::PRINT, "println!", 0, 9);
+        } else {
+            current = id_end; // Avanzar current al final del identificador/palabra clave
+            if (word == "if")      token = new Token(Token::IF, word, 0, word.length());
+            else if (word == "else")    token = new Token(Token::ELSE, word, 0, word.length());
+            else if (word == "while")   token = new Token(Token::WHILE, word, 0, word.length());
+            else if (word == "for")     token = new Token(Token::FOR, word, 0, word.length());
+            else if (word == "in")      token = new Token(Token::IN, word, 0, word.length());
+            else if (word == "true")    token = new Token(Token::TRUE, word, 0, word.length());
+            else if (word == "false")   token = new Token(Token::FALSE, word, 0, word.length());
+            else if (word == "return")  token = new Token(Token::RETURN, word, 0, word.length());
+            else if (word == "fn")      token = new Token(Token::FUN, word, 0, word.length());
+            else if (word == "let")     token = new Token(Token::LET, word, 0, word.length());
+            else if (word == "mut")     token = new Token(Token::MUT, word, 0, word.length());
+            else if (word == "i64")     token = new Token(Token::TYPE_I64, word, 0, word.length());
+            else if (word == "f64")     token = new Token(Token::TYPE_F64, word, 0, word.length());
+            else if (word == "bool")    token = new Token(Token::TYPE_BOOL, word, 0, word.length());
+            else if (word == "break")   token = new Token(Token::BREAK, word, 0, word.length());
+            else token = new Token(Token::ID, word, 0, word.length());
+        }
     } else {
         current++;
         switch (c) {
