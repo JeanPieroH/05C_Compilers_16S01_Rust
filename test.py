@@ -1,6 +1,7 @@
 import os
 import glob
 import sys
+import subprocess
 
 def read_file_content(file_path):
     """Lee el contenido de un archivo y maneja errores."""
@@ -23,7 +24,44 @@ def compare_files(file1_path, file2_path):
     
     return content1 == content2
 
+def run_make_script():
+    """Ejecuta el archivo make.py"""
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    make_script = os.path.join(base_dir, "make.py")
+    
+    if not os.path.exists(make_script):
+        print(f"Error: No existe el archivo {make_script}")
+        return False
+    
+    print("=== EJECUTANDO MAKE.PY ===")
+    try:
+        result = subprocess.run([sys.executable, make_script], 
+                              capture_output=True, text=True)
+        
+        if result.returncode == 0:
+            print("✅ make.py ejecutado exitosamente")
+            if result.stdout:
+                print("Salida:", result.stdout)
+            return True
+        else:
+            print("❌ Error ejecutando make.py")
+            if result.stderr:
+                print("Error:", result.stderr)
+            return False
+            
+    except Exception as e:
+        print(f"❌ Excepción ejecutando make.py: {e}")
+        return False
+
 def main():
+    # Ejecutar make.py primero
+    if not run_make_script():
+        print("Abortando debido a errores en make.py")
+        sys.exit(1)
+    
+    print("\n" + "="*50)
+    print("=== INICIANDO COMPARACIÓN DE ARCHIVOS ===")
+    print("="*50 + "\n")
     # Ruta base del script
     base_dir = os.path.dirname(os.path.abspath(__file__))
     
