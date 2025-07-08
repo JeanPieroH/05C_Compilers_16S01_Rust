@@ -5,7 +5,7 @@ fn main() {
 
     for i in 0..10
     {
-        x += i;
+        x =x+i;
     }
 
     println!("{}", x);
