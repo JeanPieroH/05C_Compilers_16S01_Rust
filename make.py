@@ -46,7 +46,11 @@ if __name__ == "__main__":
     # Ejecutar sobre cada input y guardar output
     for input_file in input_files:
         input_name = os.path.basename(input_file)
-        output_file = os.path.join(output_dir, f"{input_name}")
+        # Cambiar la extensión de .rs a .s para el archivo de salida
+        output_name = os.path.splitext(input_name)[0] + ".s"
+        # El compilador internamente ya usa output_dir y el nombre base correcto,
+        # así que no necesitamos especificar output_file aquí en la ejecución.
+        # El compilador main.cpp construye la ruta completa.
 
-        print(f"Ejecutando con {input_name}")
+        print(f"Ejecutando compilador con {input_name} (salida esperada: {output_name} en {output_dir})")
         subprocess.run([f"./{exe_name}", input_file])

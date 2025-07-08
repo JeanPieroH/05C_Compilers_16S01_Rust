@@ -200,8 +200,8 @@ FunDecList::~FunDecList() {
 }
 
 // --- Implementaciones de Program ---
-Program::Program() : fundecs(nullptr) {}
+Program::Program() : fundecs(new FunDecList()) {} // Initialize with a new FunDecList
 
 Program::~Program() {
-    delete fundecs;
+    delete fundecs; // This is now safe and correct
 }

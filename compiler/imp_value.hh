@@ -11,7 +11,7 @@
 
 using namespace std;
 
-enum ImpVType { NOTYPE = 0, TINT, TBOOL, TFLOAT, TARRAY, TVOID, TSTRING_LITERAL };
+enum ImpVType { NOTYPE = 0, TINT, TBOOL, TFLOAT, TARRAY, TVOID, TSTRING_LITERAL, TI32, TF32 };
 
 class ImpValue {
 public:

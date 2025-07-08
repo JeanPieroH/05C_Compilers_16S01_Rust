@@ -88,6 +88,8 @@ Token* Scanner::nextToken() {
             else if (word == "i64")     token = new Token(Token::TYPE_I64, word, 0, word.length());
             else if (word == "f64")     token = new Token(Token::TYPE_F64, word, 0, word.length());
             else if (word == "bool")    token = new Token(Token::TYPE_BOOL, word, 0, word.length());
+            else if (word == "i32")     token = new Token(Token::TYPE_I32, word, 0, word.length());
+            else if (word == "f32")     token = new Token(Token::TYPE_F32, word, 0, word.length());
             else if (word == "break")   token = new Token(Token::BREAK, word, 0, word.length());
             else token = new Token(Token::ID, word, 0, word.length());
         }

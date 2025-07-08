@@ -26,6 +26,8 @@ std::ostream& operator << ( std::ostream& outs, const Token & tok )
         case Token::TYPE_I64: outs << "TOKEN(TYPE_I64)"; break;
         case Token::TYPE_F64: outs << "TOKEN(TYPE_F64)"; break;
         case Token::TYPE_BOOL: outs << "TOKEN(TYPE_BOOL)"; break;
+        case Token::TYPE_I32: outs << "TOKEN(TYPE_I32)"; break;
+        case Token::TYPE_F32: outs << "TOKEN(TYPE_F32)"; break;
         case Token::ERR: outs << "TOKEN(ERR)"; break;
         case Token::PD: outs << "TOKEN(PD)"; break;
         case Token::PI: outs << "TOKEN(PI)"; break;

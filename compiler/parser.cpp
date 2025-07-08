@@ -593,8 +593,12 @@ string Parser::parseType() {
         return "f64";
     } else if (match(Token::TYPE_BOOL)) {
         return "bool";
+    } else if (match(Token::TYPE_I32)) {
+        return "i32";
+    } else if (match(Token::TYPE_F32)) {
+        return "f32";
     }
-    out << "Error: se esperaba un tipo (i64, f64, bool)." << endl;
+    out << "Error: se esperaba un tipo (i64, f64, bool, i32, f32)." << endl;
     exit(1);
 }
 

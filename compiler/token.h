@@ -8,7 +8,7 @@ public:
     enum Type {
         PLUS, MINUS, MUL, DIV, ERR, PD, PI,LLD,LLI,CD,CI,STRING, END, ID, PRINT, ASSIGN, PC,COLON,COMA,LT, LE, GT, GE, EQ, NEQ, AND, OR ,NOT, ARROW,LET, MUT,REF, IF, ELSE,WHILE, FOR,IN, DOTDOT, TRUE, FALSE, FUN,RETURN, BREAK,
         // Tipos de datos como palabras clave
-        TYPE_I64, TYPE_F64, TYPE_BOOL,
+        TYPE_I64, TYPE_F64, TYPE_BOOL, TYPE_I32, TYPE_F32,
         // Literales
         LITERAL_INT, LITERAL_FLOAT
         // TRUE y FALSE ya cubren los literales booleanos.

@@ -63,8 +63,10 @@ void ImpValue::set_default_value(ImpVType tt) {
     element_type = NOTYPE;
     switch (tt) {
         case TINT: int_value = 0; break;
+        case TI32: int_value = 0; break; // Default for i32
         case TBOOL: bool_value = false; break;
         case TFLOAT: float_value = 0.0; break;
+        case TF32: float_value = 0.0f; break; // Default for f32
         case TARRAY:
             if (array_value != nullptr) {
                 delete array_value;
@@ -93,14 +95,18 @@ ImpVType ImpValue::get_basic_type(string s) {
     if (s == "f64") return TFLOAT;
     if (s == "bool") return TBOOL;
     if (s == "void" || s == "unit" || s == "()") return TVOID;
+    if (s == "i32") return TI32;
+    if (s == "f32") return TF32;
     return NOTYPE;
 }
 
 std::ostream& operator << (std::ostream& outs, const ImpValue & v) {
     switch (v.type) {
         case TINT: outs << v.int_value; break;
+        case TI32: outs << v.int_value << "(i32)"; break; // Distinguish for logging
         case TBOOL: outs << (v.bool_value ? "true" : "false"); break;
         case TFLOAT: outs << v.float_value; break;
+        case TF32: outs << v.float_value << "(f32)"; break; // Distinguish for logging
         case TSTRING_LITERAL: outs << "\"" << v.string_value << "\""; break;
         case TARRAY:
             outs << "[";
