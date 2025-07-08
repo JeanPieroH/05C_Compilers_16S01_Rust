@@ -346,6 +346,5 @@ void PrintVisitor::visit(Program* program){
 }
 
 void PrintVisitor::imprimir(Program* program){
-    out<<"imprime algo ctv";
     program->accept(this);
 }

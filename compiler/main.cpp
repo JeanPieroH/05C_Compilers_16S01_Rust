@@ -71,18 +71,14 @@ int main(int argc, const char* argv[]) {
     Parser parser(&scanner,log_file);
 
     try {
-        log_file << "ctmre a" << endl;
-                log_file<<"ento"<<endl;
-
         Program* program = parser.parseProgram();
-        log_file << "ctmre a" << endl;
 
         log_file << "Parsing exitoso" << endl << endl;
 
         log_file << "Iniciando Visitor:" << endl;
 
         PrintVisitor printVisitor(log_file);
-        // printVisitor.imprimir(program); // Optional: Keep for debugging AST if needed
+        printVisitor.imprimir(program); // Optional: Keep for debugging AST if needed
 
         ImpCODE interpreter(output_file); // Uncommented
 

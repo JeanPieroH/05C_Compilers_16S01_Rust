@@ -13,8 +13,3 @@ fn main() {
     println!("{}", y);
     println!("{}", z);
 }
-//output
-//20
-//10
-//1000000
-//
