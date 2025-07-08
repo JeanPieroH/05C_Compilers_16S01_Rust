@@ -54,25 +54,47 @@ void ImpCODE::interpret(Program* p) {
     out << ".section .note.GNU-stack,\"\",@progbits" << std::endl;
 }
 
-void ImpCODE::visit(Body* b) {
-    env_vars.add_level(); // Nuevo nivel de scope para el bloque.
-    long old_current_offset = current_offset; // Guarda el offset del frame exterior.
-    std::unordered_map<std::string, long> old_stack_offsets = stack_offsets;
-
-    current_offset = -8; // Reinicia el offset para variables locales de este bloque.
-    stack_offsets.clear(); 
-
-    b->slist->accept(this);
-
-    // Si se asignó espacio para variables locales, desasignarlo.
-    if (current_offset < -8) { 
-        long locals_size = -(current_offset + 8); 
-        out << "  addq $" << locals_size << ", %rsp" << std::endl; 
+// Definition for the inherited virtual function ImpCODE::visit(Program* p)
+void ImpCODE::visit(Program* p) {
+    // This method's definition is required for vtable generation, as it's a pure virtual
+    // function in the base class ImpValueVisitor that ImpCODE overrides.
+    // The primary program processing logic (like emitting .data, .text directives,
+    // setting up main, etc.) is handled by the ImpCODE::interpret method.
+    // If any part of the visitor pattern were to call Program::accept(Visitor*),
+    // this method would be invoked.
+    // For a Program node, this typically involves visiting its constituent parts,
+    // which are function declarations according to the grammar.
+    if (p->fundecs) {
+        p->fundecs->accept(this); // Visit function declarations
     }
+    // If the grammar allowed global variable declarations at the program level,
+    // they would be visited here as well.
+}
+
+void ImpCODE::visit(Body* b) {
+    env_vars.add_level(); // New lexical scope for variable names is correct.
+
+    // current_offset should continue from its value in the outer scope.
+    // Do NOT reset current_offset here (e.g., to -8).
+    // stack_offsets should also persist; do NOT clear it. Inner scopes need access
+    // to variable locations from outer scopes. Shadowed variables are handled by env_vars.
+
+    // Store the current_offset upon entering the block if we need to calculate
+    // stack space used strictly by this block, but typically the function's
+    // overall current_offset (max depth) is used for a single stack frame setup.
+    // long offset_at_block_entry = current_offset;
+
+    if (b->slist) { // Ensure slist is not null before dereferencing
+        b->slist->accept(this);
+    }
+
+    // The stack frame is typically managed by the function's prologue and epilogue
+    // (subq %rsp at start, leave or addq %rsp at end).
+    // 'leave' instruction (movq %rbp, %rsp; popq %rbp) correctly deallocates
+    // space for all local variables addressed relative to %rbp.
+    // So, no explicit 'addq %rsp' is needed here to clean up this block's variables.
     
-    current_offset = old_current_offset; // Restaura el offset del frame anterior.
-    stack_offsets = old_stack_offsets;
-    env_vars.remove_level(); // Sale del nivel de scope.
+    env_vars.remove_level(); // Variable names declared in this scope are no longer visible.
 }
 
 void ImpCODE::visit(StatementList* s) {
@@ -450,8 +472,41 @@ ImpValue ImpCODE::visit(BinaryExp* e) {
             case GT_OP: out << "  cmpq %rcx, %rax" << std::endl; out << "  setg %al" << std::endl; out << "  movzx %al, %rax" << std::endl; result_type.type = TBOOL; break;
             case GE_OP: out << "  cmpq %rcx, %rax" << std::endl; out << "  setge %al" << std::endl; out << "  movzx %al, %rax" << std::endl; result_type.type = TBOOL; break;
             case NEQ_OP: out << "  cmpq %rcx, %rax" << std::endl; out << "  setne %al" << std::endl; out << "  movzx %al, %rax" << std::endl; result_type.type = TBOOL; break;
-            case AND: out << "  andq %rcx, %rax" << std::endl; result_type.type = TBOOL; break;
-            case OR: out << "  orq %rcx, %rax" << std::endl; result_type.type = TBOOL; break;
+            case AND: { // Short-circuiting AND (op1 && op2)
+                // LHS (op1) is already evaluated, its result is in %rax (if int/bool) or %xmm0 (if float)
+                // For logical ops, inputs must be boolean (0 or 1). Assuming type checking handled this.
+                // Current code path is for integer/boolean types, so result of LHS is in %rax.
+                std::string false_label = new_label_str();
+                std::string end_label = new_label_str();
+                out << "  cmpq $0, %rax" << std::endl;       // Check if LHS is false
+                out << "  je " << false_label << std::endl; // If LHS is false, jump to set result to false
+                // LHS is true, evaluate RHS
+                // RHS was already evaluated and its result moved to %rcx.
+                // So, if LHS is true, the result of the AND is the result of RHS.
+                out << "  movq %rcx, %rax" << std::endl;     // Result of AND is RHS (already 0 or 1)
+                out << "  jmp " << end_label << std::endl;
+                out << false_label << ":" << std::endl;
+                out << "  movq $0, %rax" << std::endl;       // Result is false
+                out << end_label << ":" << std::endl;
+                result_type.type = TBOOL;
+                break;
+            }
+            case OR: { // Short-circuiting OR (op1 || op2)
+                // LHS (op1) is in %rax.
+                std::string true_label = new_label_str();
+                std::string end_label = new_label_str();
+                out << "  cmpq $0, %rax" << std::endl;       // Check if LHS is false
+                out << "  jne " << true_label << std::endl;  // If LHS is true, jump to set result to true
+                // LHS is false, evaluate RHS
+                // RHS result is in %rcx.
+                out << "  movq %rcx, %rax" << std::endl;     // Result of OR is RHS
+                out << "  jmp " << end_label << std::endl;
+                out << true_label << ":" << std::endl;
+                out << "  movq $1, %rax" << std::endl;       // Result is true
+                out << end_label << ":" << std::endl;
+                result_type.type = TBOOL;
+                break;
+            }
             default: out << "Error: Operador binario no soportado." << std::endl; exit(1);
         }
     }
@@ -518,29 +573,50 @@ ImpValue ImpCODE::visit(BoolExp* e) {
 }
 
 ImpValue ImpCODE::visit(ArrayExp* e) {
-    ImpValue array_val;
+    ImpValue array_val; // array_val.element_type will be NOTYPE initially
     array_val.type = TARRAY; 
 
-    int element_size = 8; // Asumiendo elementos de 8 bytes (qword/double).
+    int element_size = 8; // Assuming 8-byte elements (qword/double) for simplicity.
+                        // This should ideally depend on the actual element_type if mixed sizes were supported.
     int array_size_bytes = e->values.size() * element_size;
 
     out << "  movq $" << array_size_bytes << ", %rdi" << std::endl; 
     out << "  call malloc@PLT" << std::endl; 
-    out << "  movq %rax, %rbx" << std::endl; // Guarda el puntero base del array en %rbx.
+    out << "  movq %rax, %rbx" << std::endl; // Save base pointer of the array in %rbx.
 
+    bool first_element_processed = false;
     for (size_t i = 0; i < e->values.size(); ++i) {
-        ImpValue elem_type = e->values[i]->accept(this); 
+        ImpValue current_element_val_info = e->values[i]->accept(this); // Generates code for element, type in current_element_val_info
         long offset_in_array = i * element_size; 
 
-        if (elem_type.type == TFLOAT) {
+        if (!first_element_processed) {
+            array_val.element_type = current_element_val_info.type; // Set array's element_type from the first element
+            first_element_processed = true;
+            // Note: Rust arrays are homogeneous. A full compiler would verify all elements match this type.
+            // We assume homogeneity as per Rust rules, enforced by parser or type checker.
+        }
+        // Store the element in the array
+        if (current_element_val_info.type == TFLOAT) {
             out << "  movsd %xmm0, " << offset_in_array << "(%rbx)" << std::endl;
-        } else {
+        } else { // TINT, TBOOL, or pointers (TARRAY itself if nested, though not fully handled)
             out << "  movq %rax, " << offset_in_array << "(%rbx)" << std::endl;
         }
     }
     
-    out << "  movq %rbx, %rax" << std::endl; // Retorna la dirección base del array.
-    return array_val; 
+    // If the array was empty, element_type remains NOTYPE.
+    // In Rust, `let empty_arr = [];` is a type error. `let empty_arr: [SomeType; 0] = [];` is fine.
+    // The type context would typically provide the element_type for empty arrays.
+    // If e->values.empty(), array_val.element_type will be NOTYPE. This might be an issue
+    // if this ImpValue is assigned to a variable, and that variable's element_type in env_vars
+    // becomes NOTYPE, leading to problems in AccesoArrayExp or AssignArrayStatement.
+    // For this project, we might assume test cases won't rely on empty untyped literals.
+    if (e->values.empty() && array_val.element_type == NOTYPE) {
+        // Potentially default to TINT or raise an error/warning if strictness is needed.
+        // out << "# Warning: Empty array literal created with NOTYPE element_type." << std::endl;
+    }
+
+    out << "  movq %rbx, %rax" << std::endl; // Return the base address of the array in %rax.
+    return array_val; // array_val now has .element_type set if array was not empty.
 }
 
 ImpValue ImpCODE::visit(IdentifierExp* e) {

@@ -82,21 +82,21 @@ int main(int argc, const char* argv[]) {
         log_file << "Iniciando Visitor:" << endl;
 
         PrintVisitor printVisitor(log_file);
-        printVisitor.imprimir(program);
+        // printVisitor.imprimir(program); // Optional: Keep for debugging AST if needed
 
-    //     ImpCODE interpreter(output_file);
+        ImpCODE interpreter(output_file); // Uncommented
 
-    //     log_file << endl;
-    //     log_file << "IMPRIMIR:" << endl;
-    //     printVisitor.imprimir(program);  // Asegúrate que `imprimir` soporte ostream&
-    //     log_file << endl;
+        log_file << endl;
+        log_file << "IMPRIMIR AST (para debugging si es necesario):" << endl;
+        // printVisitor.imprimir(program); // Uncomment if you want to log the AST structure
+        log_file << endl;
 
-    //     log_file << endl << "Run program:" << endl;
+        log_file << endl << "Generando codigo ensamblador:" << endl;
 
-    //     cout << "Generando codigo ensamblador en outputs/" << base_name<<".s" << endl;
-    //     interpreter.interpret(program);              // ejecutar
+        cout << "Generando codigo ensamblador en outputs/" << base_name << ".s" << endl;
+        interpreter.interpret(program);              // ejecutar // Uncommented
 
-    //     log_file << "End of program execution" << endl;
+        log_file << "Generacion de codigo ensamblador finalizada." << endl;
         log_file.close();
         output_file.close();
 
